@@ -1,0 +1,4 @@
+pymongo==4.8.0
+PySocks==1.7.1
+selenium==4.24.0
+
