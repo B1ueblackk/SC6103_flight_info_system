@@ -106,7 +106,7 @@ class Server:
             # 将所有匹配的航班信息添加到返回列表中
             ret = [flight for flight in cursor]
             if len(ret) == 0:
-                return 0, "No flights matched!"
+                return 0, f"No flights matched {source_place} to {destination_place}!"
             return 0, ''.join([flight.__repr__() for flight in ret])
         except Exception as e:
             return 1, str(e)
@@ -123,7 +123,9 @@ class Server:
                     "_id": 0
                 }
             )
-            return 0, flight_info
+            if flight_info:
+                return 0, flight_info
+            return 0, f"No flights matched {flight_identifier}!"
         except Exception as e:
             return 1, str(e)
 
