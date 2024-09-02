@@ -1,27 +1,42 @@
 import json
 import socket
+import threading
 from datetime import datetime, timedelta
 
 from pymongo import MongoClient
-from Server.utils.data_process import binary_string_to_string
+from utils.data_process import binary_string_to_string
 
 
 class Server:
-    def __init__(self, config_file='config.json'):
+    def __init__(self, config_file='../config.json',flag=0):
         print("Server starting...")
         # 从 config.json 文件读取配置
         with open(config_file, 'r') as f:
             config = json.load(f)
         self.host = config.get('host', 'localhost')
-        self.port = int(config.get('port', 12345))
+        if flag == 0:
+            self.port = int(config.get('port', 12345))
+        else:
+            self.port = int(config.get('test_port', 12346))
         print(f"Server ip: {self.host}:{self.port}")
         self.server_socket = None
         self.client_address = None
         self.monitor_dict = {}
+        try:
+            self.connect_database(config_file=config_file, flag=flag)
+        except Exception as e:
+            print("connect failed\n", str(e))
+
+    def connect_database(self, flag: int = 0, config_file='../config.json'):
         # 从配置文件中获取MongoDB连接参数
+        with open(config_file, 'r') as f:
+            config = json.load(f)
         host = config['mongodb']['host']
         port = config['mongodb']['port']
-        database_name = config['mongodb']['database']
+        if flag == 0:
+            database_name = config['mongodb']['database']
+        else:
+            database_name = config['mongodb']['test_database']
         username = config['mongodb']['username']
         password = config['mongodb']['password']
 
@@ -36,7 +51,7 @@ class Server:
         # 选择数据库
         db = client[database_name]
         # 选择集合
-        self.collection = db['flight_info']
+        self.collection = db[database_name]
 
     def start_listening(self):
         # AF_INET代表ipv4，SOCK_DGRAM代表使用UDP作为通讯协议
@@ -178,7 +193,6 @@ class Server:
             # 解析输入数据
             flight_identifier = int(data.split(';')[1])
             monitor_period = int(data.split(';')[2])
-
             # 计算监听的结束时间
             current_time = datetime.now()
             end_time = current_time + timedelta(minutes=monitor_period)
@@ -187,14 +201,40 @@ class Server:
             if flight_identifier not in self.monitor_dict:
                 self.monitor_dict[flight_identifier] = []
 
-            # 添加用户监听请求，包括监听的结束时间
-            self.monitor_dict[flight_identifier].append({
+            monitor_info = {
                 "client_address": self.client_address,  # 假设 client_address 是在其他地方设置的
                 "end_time": end_time
-            })
+            }
+
+            # 添加用户监听请求，包括监听的结束时间
+            self.monitor_dict[flight_identifier].append(monitor_info)
+
+            # 启动定时线程
+            monitor_thread = threading.Thread(
+                target=self.monitor_end_thread,
+                args=(flight_identifier, monitor_info)
+            )
+            monitor_thread.start()
             return 0, "Monitoring started!"
         except Exception as e:
             return 1, str(e)
+
+    def monitor_end_thread(self, flight_identifier: int, monitor_info: dict):
+        # 等待监视期结束
+        end_time = monitor_info["end_time"]
+        time_to_wait = (end_time - datetime.now()).total_seconds()
+        if time_to_wait > 0:
+            threading.Event().wait(time_to_wait)
+
+        # 发送监视结束消息
+        client_address = monitor_info["client_address"]
+        response = f"monitor finished"
+        self.server_socket.sendto(response.encode('utf-8'), client_address)
+        print(f"{client_address} finished monitoring")
+        # 从监视列表中移除
+        self.monitor_dict[flight_identifier].remove(monitor_info)
+        if not self.monitor_dict[flight_identifier]:
+            del self.monitor_dict[flight_identifier]
 
 
 
