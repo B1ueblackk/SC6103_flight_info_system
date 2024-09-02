@@ -1,0 +1,11 @@
+{
+  "host": "localhost",
+  "port": "12345",
+  "mongodb": {
+        "host": "localhost",
+        "port": 27017,
+        "database": "flight_info",
+        "username": "",
+        "password": ""
+    }
+}
