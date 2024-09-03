@@ -9,7 +9,7 @@ from utils.data_process import binary_string_to_string
 
 class Server:
     def __init__(self, config_file='../config.json',flag=0):
-        print("Server starting...")
+        print("Server: Server starting...")
         # 从 config.json 文件读取配置
         with open(config_file, 'r') as f:
             config = json.load(f)
@@ -18,14 +18,15 @@ class Server:
             self.port = int(config.get('port', 12345))
         else:
             self.port = int(config.get('test_port', 12346))
-        print(f"Server ip: {self.host}:{self.port}")
+        print(f"Server: Server ip: {self.host}:{self.port}")
         self.server_socket = None
         self.client_address = None
         self.monitor_dict = {}
+        self.running = False
         try:
             self.connect_database(config_file=config_file, flag=flag)
         except Exception as e:
-            print("connect failed\n", str(e))
+            print("Server: connect failed\n", str(e))
 
     def connect_database(self, flag: int = 0, config_file='../config.json'):
         # 从配置文件中获取MongoDB连接参数
@@ -54,29 +55,40 @@ class Server:
         self.collection = db[database_name]
 
     def start_listening(self):
-        # AF_INET代表ipv4，SOCK_DGRAM代表使用UDP作为通讯协议
+        self.running = True
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # 监听config中对应的端口
         self.server_socket.bind((self.host, self.port))
-        print(f"UDP 服务器已启动，正在监听 {self.host}:{self.port}...")
+        self.server_socket.settimeout(1)  # 设置超时时间为1秒
+        print(f"Server: UDP 服务器已启动，正在监听 {self.host}:{self.port}...")
 
         try:
-            while True:
-                # 等待接收数据，1024为缓冲区大小
-                data, self.client_address = self.server_socket.recvfrom(1024)
-                text = binary_string_to_string(data.decode('utf-8'))
-                print(f"接收到来自 {self.client_address} 的数据: {text}")
-                ret_flag, ret_msg = self.handle_request(binary_string_to_string(data.decode('utf-8')))
-                print(ret_msg)
-                if ret_flag == 0:
-                    # todo 转为01串
-                    response = f"{ret_msg}"
-                    self.server_socket.sendto(response.encode('utf-8'), self.client_address)
-        except KeyboardInterrupt:
-            self.server_socket.close()
-            print("服务器已关闭")
+            while self.running:
+                try:
+                    data, self.client_address = self.server_socket.recvfrom(1024)
+                    text = binary_string_to_string(data.decode('utf-8'))
+                    print(f"Server: 接收到来自 {self.client_address} 的数据: {text}")
+                    ret_flag, ret_msg = self.handle_request(text)
+                    if ret_flag == 0:
+                        response = f"{ret_msg}"
+                        print(f"Server: 发送给{self.client_address}的数据: {ret_msg}")
+                        self.server_socket.sendto(response.encode('utf-8'), self.client_address)
+                except socket.timeout:
+                    # 超时检查，避免无限等待
+                    continue
         except Exception as e:
-            print(str(e))
+            print("Server: start listening failed: " + str(e))
+        finally:
+            self.server_socket.close()
+            print("Server: 服务器已关闭")
+
+    def stop_listening(self):
+        if not self.running:
+            return
+        self.running = False
+        # 在关闭之前检查是否已经初始化
+        if self.server_socket:
+            self.server_socket.close()
+        print("Server: 服务器已停止监听")
 
     def handle_request(self, data: str) -> (int, str):
         opt = data.split(';')[0]
@@ -188,6 +200,7 @@ class Server:
             if not self.monitor_dict[flight_identifier]:
                 del self.monitor_dict[flight_identifier]
 
+    # todo block requests if already exists a monitor
     def monitor_update(self, data: str) -> (int, str):
         try:
             # 解析输入数据
@@ -230,12 +243,11 @@ class Server:
         client_address = monitor_info["client_address"]
         response = f"monitor finished"
         self.server_socket.sendto(response.encode('utf-8'), client_address)
-        print(f"{client_address} finished monitoring")
+        print(f"Server: {client_address} finished monitoring")
         # 从监视列表中移除
         self.monitor_dict[flight_identifier].remove(monitor_info)
         if not self.monitor_dict[flight_identifier]:
             del self.monitor_dict[flight_identifier]
-
 
 
 if __name__ == "__main__":

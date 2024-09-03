@@ -1,0 +1,18 @@
+{
+  "101": {
+    "flight_identifier":101,
+    "source_place":"New York",
+    "destination_place":"Los Angeles",
+    "departure_time":"2024-09-01 15:30:00",
+    "airfare":299.99,
+    "seat_availability":50
+  },
+  "102": {
+    "flight_identifier":102,
+    "source_place":"Beijing",
+    "destination_place":"Nanjing",
+    "departure_time":"2024-11-01 19:30:00",
+    "airfare":233.33,
+    "seat_availability":150
+  }
+}
