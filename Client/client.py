@@ -1,5 +1,7 @@
 import json
 import socket
+import threading
+import time
 
 from utils.data_process import string_to_binary_string
 
@@ -15,6 +17,16 @@ class Client:
             self.server_port = int(config.get('test_port', 12346))
         self.client = None
 
+    def input_command(self, command):
+        opt = command.split(' ')
+        # 使用 getattr 从对象 obj 中获取方法
+        method = getattr(self, opt, None)
+        args = command[1:]
+        if callable(method):
+            return method(*args)
+        else:
+            return f"Method '{opt}' not found"
+
     def query_flight(self, source_place: str, destination: str):
         query_str = "query_flight" + ";" + source_place + ";" + destination
         return self.send_request(query_str)
@@ -29,25 +41,32 @@ class Client:
 
     def monitor_update(self, flight_id: int, period_time: int, monitor_result=None):
         transfer_str = "monitor_update" + ";" + str(flight_id) + ";" + str(period_time)
-        self.send_request(transfer_str, monitor_result)
+        return self.send_request(transfer_str, monitor_result)
 
     def send_request(self, data: str, monitor_result=None):
         binary_data = string_to_binary_string(data)
+        response_received = threading.Event()
         try:
             # todo 01
             self.client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.client.sendto(binary_data.encode('utf-8'), (self.server_host, self.server_port))
             self.local_ip, self.local_port = self.client.getsockname()
             if data.startswith("monitor_update"):
-                while True:
-                    response, _ = self.client.recvfrom(1024)
-                    response_text = response.decode('utf-8')
-                    print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的响应: {response_text}")
-                    if monitor_result is not None:
-                        monitor_result['received_updates'].append(response_text)
-                    # todo 01
-                    if response_text.startswith("monitor finished"):
-                        break
+                # 创建一个线程来处理接收消息
+                def receive_messages():
+                    while True:
+                        response, _ = self.client.recvfrom(1024)
+                        response_text = response.decode('utf-8')
+                        print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的响应: {response_text}")
+                        if monitor_result is not None:
+                            monitor_result['received_updates'].append(response_text)
+                        if response_text.startswith("monitor finished"):
+                            response_received.set()
+                            break
+                # 启动接收消息的线程
+                receiver_thread = threading.Thread(target=receive_messages)
+                receiver_thread.start()
+                return response_received.wait()
             else:
                 response, _ = self.client.recvfrom(1024)
                 response_text = response.decode('utf-8')
@@ -60,12 +79,15 @@ class Client:
         except Exception as e:
             return 1, f"Client {self.local_ip}:{self.local_port}: " + str(e)
         finally:
-            # 关闭 socket
-            self.client.close()
-
-
+            if self.client:
+                # 关闭 socket
+                self.client.close()
 
 if __name__ == "__main__":
     test_client = Client()
     # test_client.query_flight("Beijin", "Los Angeles")
-    response = test_client.query_flight_info(101)
+    test_client.monitor_update(101, 1)
+    test_client.query_flight_info(101)
+    time.sleep(2)
+    test_client.monitor_update(101, 2)
+
