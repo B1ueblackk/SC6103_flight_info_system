@@ -93,7 +93,7 @@ class Server:
     def handle_request(self, data: str) -> (int, str):
         opt = data.split(';')[0]
         # 使用 getattr 从对象 obj 中获取方法
-        method = getattr(self, opt, data)
+        method = getattr(self, opt, None)
 
         if callable(method):
             return method(data)
@@ -214,6 +214,10 @@ class Server:
             if flight_identifier not in self.monitor_dict:
                 self.monitor_dict[flight_identifier] = []
 
+            for monitor in self.monitor_dict[flight_identifier]:
+                if self.client_address == monitor["client_address"] and monitor["end_time"] > end_time:
+                    return 0, "Monitoring already exists!"
+
             monitor_info = {
                 "client_address": self.client_address,  # 假设 client_address 是在其他地方设置的
                 "end_time": end_time
@@ -230,6 +234,7 @@ class Server:
             monitor_thread.start()
             return 0, "Monitoring started!"
         except Exception as e:
+            print("error:" + str(e))
             return 1, str(e)
 
     def monitor_end_thread(self, flight_identifier: int, monitor_info: dict):
