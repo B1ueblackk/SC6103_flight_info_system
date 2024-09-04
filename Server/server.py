@@ -4,7 +4,7 @@ import threading
 from datetime import datetime, timedelta
 
 from pymongo import MongoClient
-from utils.data_process import binary_string_to_string
+from utils.data_process import binary_string_to_string, string_to_binary_string
 
 
 class Server:
@@ -71,7 +71,7 @@ class Server:
                     if ret_flag == 0:
                         response = f"{ret_msg}"
                         print(f"Server: 发送给{self.client_address}的数据: {ret_msg}")
-                        self.server_socket.sendto(response.encode('utf-8'), self.client_address)
+                        self.server_socket.sendto(string_to_binary_string(response).encode('utf-8'), self.client_address)
                 except socket.timeout:
                     # 超时检查，避免无限等待
                     continue
@@ -200,7 +200,6 @@ class Server:
             if not self.monitor_dict[flight_identifier]:
                 del self.monitor_dict[flight_identifier]
 
-    # todo block requests if already exists a monitor
     def monitor_update(self, data: str) -> (int, str):
         try:
             # 解析输入数据

@@ -3,7 +3,7 @@ import socket
 import threading
 import time
 
-from utils.data_process import string_to_binary_string
+from utils.data_process import string_to_binary_string, binary_string_to_string
 
 
 class Client:
@@ -43,11 +43,12 @@ class Client:
         transfer_str = "monitor_update" + ";" + str(flight_id) + ";" + str(period_time)
         return self.send_request(transfer_str, monitor_result)
 
+    # todo marshall and unmarshall
     def send_request(self, data: str, monitor_result=None):
+        # string to 01
         binary_data = string_to_binary_string(data)
         response_received = threading.Event()
         try:
-            # todo 01
             self.client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.client.sendto(binary_data.encode('utf-8'), (self.server_host, self.server_port))
             self.local_ip, self.local_port = self.client.getsockname()
@@ -55,8 +56,9 @@ class Client:
                 # 创建一个线程来处理接收消息
                 def receive_messages():
                     while True:
-                        response, _ = self.client.recvfrom(1024)
-                        response_text = response.decode('utf-8')
+                        response, _ = self.client.recvfrom(2048)
+                        # 01 to string
+                        response_text = binary_string_to_string(response.decode('utf-8'))
                         print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的响应: {response_text}")
                         if monitor_result is not None:
                             monitor_result['received_updates'].append(response_text)
@@ -68,8 +70,8 @@ class Client:
                 receiver_thread.start()
                 return response_received.wait()
             else:
-                response, _ = self.client.recvfrom(1024)
-                response_text = response.decode('utf-8')
+                response, _ = self.client.recvfrom(2048)
+                response_text = binary_string_to_string(response.decode('utf-8'))
                 print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的响应: {response_text}")
                 if monitor_result is not None:
                     monitor_result['received_updates'].append(response_text)
@@ -86,7 +88,7 @@ class Client:
 if __name__ == "__main__":
     test_client = Client()
     # test_client.query_flight("Beijin", "Los Angeles")
-    test_client.monitor_update(101, 1)
+    # test_client.monitor_update(101, 1)
     test_client.query_flight_info(101)
     time.sleep(2)
     test_client.monitor_update(101, 2)
