@@ -1,10 +1,13 @@
+import time
+from flask import Flask, request, jsonify, render_template
+from flask_socketio import SocketIO, emit
 import json
 import socket
 import threading
-import time
+from data_process import string_to_binary_string, binary_string_to_string
 
-from utils.data_process import string_to_binary_string, binary_string_to_string
-
+app = Flask(__name__)
+socketio = SocketIO(app)
 
 class Client:
     def __init__(self, config_file='../config.json', flag=0):
@@ -60,6 +63,7 @@ class Client:
                         # 01 to string
                         response_text = binary_string_to_string(response.decode('utf-8'))
                         print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的响应: {response_text}")
+                        socketio.emit('monitor_update', {'data': response_text})
                         if monitor_result is not None:
                             monitor_result['received_updates'].append(response_text)
                         if response_text.startswith("monitor finished"):
@@ -85,11 +89,45 @@ class Client:
                 # 关闭 socket
                 self.client.close()
 
+client = Client()
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/query_flight', methods=['POST'])
+def query_flight():
+    data = request.get_json()
+    source_place = data['source_place']
+    destination = data['destination']
+    code, response = client.query_flight(source_place, destination)
+    return jsonify({'code': code, 'response': response})
+
+@app.route('/reserve_seats', methods=['POST'])
+def reserve_seats():
+    data = request.get_json()
+    flight_id = data['flight_id']
+    seats_count = data['seats_count']
+    code, response = client.reserve_seats(flight_id, seats_count)
+    return jsonify({'code': code, 'response': response})
+
+@app.route('/start_monitor', methods=['GET'])
+def start_monitor():
+    flight_id = request.args.get('flightId')
+    period_time = int(request.args.get('periodTime'))
+    client.monitor_update(int(flight_id), period_time)
+    return "Monitoring started"
+
 if __name__ == "__main__":
-    test_client = Client()
-    # test_client.query_flight("Beijin", "Los Angeles")
-    # test_client.monitor_update(101, 1)
-    test_client.query_flight_info(101)
-    time.sleep(2)
-    test_client.monitor_update(101, 2)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+
+    # socketio.run(app, host='10.91.220.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+
+# if __name__ == "__main__":
+#     test_client = templates()
+#     # test_client.query_flight("Beijin", "Los Angeles")
+#     # test_client.monitor_update(101, 1)
+#     test_client.query_flight_info(101)
+#     time.sleep(2)
+#     test_client.monitor_update(101, 2)
 

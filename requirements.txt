@@ -1,4 +1,5 @@
 pymongo==4.8.0
 PySocks==1.7.1
 selenium==4.24.0
-
+flask~=3.0.3
+flask-socketio~=5.3.7
