@@ -26,9 +26,12 @@ class Client:
         method = getattr(self, opt, None)
         args = command[1:]
         if callable(method):
-            return method(*args)
+            try:
+                return method(*args)
+            except Exception as e:
+                return 1, f"error: {str(e)}"
         else:
-            return f"Method '{opt}' not found"
+            return 1, f"Method '{opt}' not found"
 
     def query_flight(self, source_place: str, destination: str):
         query_str = "query_flight" + ";" + source_place + ";" + destination
@@ -58,31 +61,48 @@ class Client:
             if data.startswith("monitor_update"):
                 # 创建一个线程来处理接收消息
                 def receive_messages():
+                    complete_response = ""
                     while True:
                         response, _ = self.client.recvfrom(2048)
-                        # 01 to string
-                        response_text = binary_string_to_string(response.decode('utf-8'))
-                        print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的响应: {response_text}")
-                        socketio.emit('monitor_update', {'data': response_text})
-                        if monitor_result is not None:
-                            monitor_result['received_updates'].append(response_text)
-                        if response_text.startswith("monitor finished"):
-                            response_received.set()
-                            break
+                        complete_response += response.decode('utf-8')
+                        if "END" in complete_response:
+                            complete_response = complete_response.replace("END", "")
+                        try:
+                            # 尝试将完整的JSON加载为对象
+                            response_obj = json.loads(binary_string_to_string(complete_response))
+                            print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的完整响应: {response_obj}")
+                            socketio.emit('monitor_update', {'data': response_obj['message']})
+                            complete_response = ""
+                            if monitor_result is not None:
+                                monitor_result['received_updates'].append(response_obj['message'])
+                            if response_obj['message'].startswith("monitor finished"):
+                                response_received.set()
+                                break
+                        except json.JSONDecodeError:
+                            # 说明数据未完全接收，继续接收
+                            continue
                 # 启动接收消息的线程
                 receiver_thread = threading.Thread(target=receive_messages)
                 receiver_thread.start()
                 return response_received.wait()
             else:
-                response, _ = self.client.recvfrom(2048)
-                response_text = binary_string_to_string(response.decode('utf-8'))
-                print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的响应: {response_text}")
-                if monitor_result is not None:
-                    monitor_result['received_updates'].append(response_text)
-                return 0, response_text
+                complete_response = ""
+                while True:
+                    response, _ = self.client.recvfrom(2048)
+                    complete_response += response.decode('utf-8')
+                    if "END" in complete_response:
+                        complete_response = complete_response.replace("END", "")
+                    try:
+                        response_obj = json.loads(binary_string_to_string(complete_response))
+                        print(f"Client {self.local_ip}:{self.local_port}: 从服务器接收到的完整响应: {response_obj}")
+                        return response_obj['flag'], response_obj['message']
+                    except json.JSONDecodeError:
+                        continue
         except socket.timeout:
+            print("timeout")
             return 1, f"Client {self.local_ip}:{self.local_port}: Request timed out"
         except Exception as e:
+            print(f"line:{e.__traceback__.tb_lineno} {str(e)}")
             return 1, f"Client {self.local_ip}:{self.local_port}: " + str(e)
         finally:
             if self.client:
@@ -103,6 +123,13 @@ def query_flight():
     code, response = client.query_flight(source_place, destination)
     return jsonify({'code': code, 'response': response})
 
+@app.route('/query_flight_info', methods=['POST'])
+def query_flight_info():
+    data = request.get_json()
+    flight_identifier = data['source_place']
+    code, response = client.query_flight_info(flight_identifier)
+    return jsonify({'code': code, 'response': response})
+
 @app.route('/reserve_seats', methods=['POST'])
 def reserve_seats():
     data = request.get_json()
@@ -114,14 +141,15 @@ def reserve_seats():
 @app.route('/start_monitor', methods=['GET'])
 def start_monitor():
     flight_id = request.args.get('flightId')
-    period_time = int(request.args.get('periodTime'))
-    client.monitor_update(int(flight_id), period_time)
-    return "Monitoring started"
+    period_time = request.args.get('periodTime')
+    if flight_id == '' or period_time == '':
+        return json.dumps({"code": 1, "response": "Bad Params!"})
+    client.monitor_update(int(flight_id), int(period_time))
+    return json.dumps({"code": 0, "response": "Monitor Started!"})
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
-
-    # socketio.run(app, host='10.91.220.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    # socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)
 
 # if __name__ == "__main__":
 #     test_client = templates()

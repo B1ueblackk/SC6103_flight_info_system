@@ -3,10 +3,7 @@ body {
     background-color: #f4f4f4;
     margin: 0;
     padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
+    /* 移除垂直居中和水平居中对齐 */
 }
 
 .container {
@@ -14,8 +11,23 @@ body {
     padding: 20px;
     border-radius: 10px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    width: 400px;
+    width: 600px; /* 增加宽度以容纳表格 */
+    max-width: 90%; /* 确保小屏幕时不超过视窗 */
+    margin: 20px auto; /* 自动水平居中并给顶部留出间距 */
 }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px; /* 缩小表格字体 */
+}
+
+th, td {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
 
 h1, h2 {
     text-align: center;
@@ -46,6 +58,13 @@ button {
     border: none;
     border-radius: 4px;
     cursor: pointer;
+}
+
+button:disabled {
+    background-color: #ccc;  /* 灰色背景 */
+    color: #666;  /* 字体颜色变浅 */
+    cursor: not-allowed;  /* 鼠标光标显示为禁止符号 */
+    border: 1px solid #999;  /* 灰色边框 */
 }
 
 button:hover {

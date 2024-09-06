@@ -22,6 +22,7 @@ class Server:
         self.server_socket = None
         self.client_address = None
         self.monitor_dict = {}
+        self.user_dict = {}
         self.running = False
         try:
             self.connect_database(config_file=config_file, flag=flag)
@@ -54,6 +55,7 @@ class Server:
         # 选择集合
         self.collection = db[database_name]
 
+
     def start_listening(self):
         self.running = True
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -68,10 +70,9 @@ class Server:
                     text = binary_string_to_string(data.decode('utf-8'))
                     print(f"Server: 接收到来自 {self.client_address} 的数据: {text}")
                     ret_flag, ret_msg = self.handle_request(text)
-                    if ret_flag == 0:
-                        response = f"{ret_msg}"
-                        print(f"Server: 发送给{self.client_address}的数据: {ret_msg}")
-                        self.server_socket.sendto(string_to_binary_string(response).encode('utf-8'), self.client_address)
+                    # 构造要发送的响应
+                    response = json.dumps({'flag': ret_flag, 'message': ret_msg})
+                    self.chunk_data(response, self.client_address)
                 except socket.timeout:
                     # 超时检查，避免无限等待
                     continue
@@ -80,6 +81,16 @@ class Server:
         finally:
             self.server_socket.close()
             print("Server: 服务器已关闭")
+
+    def chunk_data(self, str_to_send: str, address):
+        response_binary = string_to_binary_string(str_to_send).encode('utf-8')
+        # 分段发送，每次1024字节
+        CHUNK_SIZE = 1024
+        for i in range(0, len(response_binary), CHUNK_SIZE):
+            chunk = response_binary[i:i + CHUNK_SIZE]
+            is_last_chunk = (i + CHUNK_SIZE >= len(response_binary))  # 是否是最后一个chunk
+            self.server_socket.sendto(chunk + (b'END' if is_last_chunk else b''), address)
+        print(f"Server: 数据已发送给 {address}")
 
     def stop_listening(self):
         if not self.running:
@@ -126,15 +137,22 @@ class Server:
                 "destination_place": destination_place
             }
             projection = {
-                "_id": 0
+                "_id": 0,
             }
             # 执行查询并应用投影
             cursor = self.collection.find(query, projection)
             # 将所有匹配的航班信息添加到返回列表中
-            ret = [flight for flight in cursor]
+            ret = [{
+                    'flight_identifier': flight['flight_identifier'],
+                    'source_place': flight['source_place'],
+                    'destination_place': flight['destination_place'],
+                    'departure_time': flight['departure_time'].strftime('%Y-%m-%dT%H:%M:%S'),
+                    'airfare': flight['airfare'],
+                    'seat_availability': flight['seat_availability']
+                } for flight in cursor]
             if len(ret) == 0:
-                return 0, f"No flights matched {source_place} to {destination_place}!"
-            return 0, ''.join([flight.__repr__() for flight in ret])
+                return 1, f"No flights matched {source_place} to {destination_place}!"
+            return 0, json.dumps(ret)
         except Exception as e:
             return 1, str(e)
 
@@ -151,9 +169,19 @@ class Server:
                 }
             )
             if flight_info:
-                return 0, flight_info
-            return 0, f"No flights matched {flight_identifier}!"
+                ret = {
+                    'flight_identifier': flight_info['flight_identifier'],
+                    'source_place': flight_info['source_place'],
+                    'destination_place': flight_info['destination_place'],
+                    'departure_time': flight_info['departure_time'].strftime('%Y-%m-%dT%H:%M:%S'),
+                    'airfare': flight_info['airfare'],
+                    'seat_availability': flight_info['seat_availability']
+                }
+
+                return 0, json.dumps(ret)
+            return 1, f"No flights matched {flight_identifier}!"
         except Exception as e:
+            print(str(e))
             return 1, str(e)
 
     def reserve_seats(self, data: str) -> (int, str):
@@ -164,9 +192,11 @@ class Server:
 
             # 查找航班信息
             flight_info = self.collection.find_one({"flight_identifier": flight_identifier})
+            if flight_info is None:
+                return 0, f"No such flight {flight_identifier}!"
             # 检查座位数量是否足够
             if flight_info["seat_availability"] < seats_count:
-                return 0, "Seats not enough!"
+                return 1, "Seats not enough!"
             else:
                 # 更新座位数量
                 new_seat_availability = flight_info["seat_availability"] - seats_count
@@ -184,9 +214,9 @@ class Server:
             monitor_list = self.monitor_dict[flight_identifier]
             for monitor in monitor_list:
                 if datetime.now() < monitor["end_time"]:
-                    # todo 转为01串
-                    response = f"seats' availability updates: {new_seat_availability}"
-                    self.server_socket.sendto(response.encode('utf-8'), monitor["client_address"])
+                    response = f"flight-{flight_identifier} seats' availability updates: {new_seat_availability} at {datetime.now()}"
+                    ret = json.dumps({"code": 0, "message": response})
+                    self.chunk_data(ret, monitor["client_address"])
 
     def cleanup_expired_monitors(self):
         current_time = datetime.now()
@@ -212,10 +242,14 @@ class Server:
             # 更新监听字典
             if flight_identifier not in self.monitor_dict:
                 self.monitor_dict[flight_identifier] = []
+            if self.client_address not in self.user_dict:
+                self.user_dict[self.client_address] = (flight_identifier, end_time)
+            else:
+                return 1, "One client can only monitor on flight!"
 
             for monitor in self.monitor_dict[flight_identifier]:
                 if self.client_address == monitor["client_address"] and monitor["end_time"] > end_time:
-                    return 0, "Monitoring already exists!"
+                    return 1, "Monitoring already exists!"
 
             monitor_info = {
                 "client_address": self.client_address,  # 假设 client_address 是在其他地方设置的
@@ -245,14 +279,37 @@ class Server:
 
         # 发送监视结束消息
         client_address = monitor_info["client_address"]
-        response = f"monitor finished"
-        self.server_socket.sendto(response.encode('utf-8'), client_address)
+        message = f"Monitor finished!"
+        ret = json.dumps({"code": 0, "message": message})
+        self.server_socket.sendto(string_to_binary_string(ret).encode('utf-8'), client_address)
         print(f"Server: {client_address} finished monitoring")
         # 从监视列表中移除
         self.monitor_dict[flight_identifier].remove(monitor_info)
         if not self.monitor_dict[flight_identifier]:
             del self.monitor_dict[flight_identifier]
+        if not self.user_dict[client_address]:
+            del self.user_dict[client_address]
 
 
 if __name__ == "__main__":
     print(1)
+    """    
+    假设你有一个4位的LFSR，其初始状态为 1101，使用的反馈多项式为 x^4 + x^3 + 1。请按照以下步骤进行：
+    生成密钥流：计算出前8位的密钥流。
+    加密明文：使用生成的密钥流对明文 10101100 进行加密，得到密文。
+    解密密文：使用相同的LFSR和初始状态对加密后的密文进行解密，恢复出原明文
+    1101  1  0 xor 1 = 1 
+    1110  0  1 xor 0 = 1
+    1111  1  1 xor 1 = 0
+    0111  1  1 xor 1 = 0
+    0011  1  1 xor 1 = 0
+    0001  1  0 xor 1 = 1
+    1000  0  0 xor 0 = 0
+    0100  0  0 xor 0 = 0
+    
+    11000100
+    10101100
+    xor
+    01101000
+    
+    """
