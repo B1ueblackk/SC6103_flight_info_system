@@ -1,8 +1,11 @@
 import json
 import socket
 import threading
+import time
 from datetime import datetime, timedelta
 
+import bcrypt
+from flask import jsonify
 from pymongo import MongoClient
 from utils.data_process import binary_string_to_string, string_to_binary_string
 
@@ -53,8 +56,9 @@ class Server:
         # 选择数据库
         db = client[database_name]
         # 选择集合
-        self.collection = db[database_name]
-
+        self.flight_info_collection = db[database_name]
+        self.user_collection = db["user_info"]
+        self.order_collection = db["order_info"]
 
     def start_listening(self):
         self.running = True
@@ -62,7 +66,6 @@ class Server:
         self.server_socket.bind((self.host, self.port))
         self.server_socket.settimeout(1)  # 设置超时时间为1秒
         print(f"Server: UDP 服务器已启动，正在监听 {self.host}:{self.port}...")
-
         try:
             while self.running:
                 try:
@@ -71,7 +74,7 @@ class Server:
                     print(f"Server: 接收到来自 {self.client_address} 的数据: {text}")
                     ret_flag, ret_msg = self.handle_request(text)
                     # 构造要发送的响应
-                    response = json.dumps({'flag': ret_flag, 'message': ret_msg})
+                    response = json.dumps({'flag': ret_flag, 'message': ret_msg, "receiver": self.client_address})
                     self.chunk_data(response, self.client_address)
                 except socket.timeout:
                     # 超时检查，避免无限等待
@@ -90,7 +93,7 @@ class Server:
             chunk = response_binary[i:i + CHUNK_SIZE]
             is_last_chunk = (i + CHUNK_SIZE >= len(response_binary))  # 是否是最后一个chunk
             self.server_socket.sendto(chunk + (b'END' if is_last_chunk else b''), address)
-        print(f"Server: 数据已发送给 {address}")
+        print(f"Server: 数据{str_to_send} 已发送给 {address}")
 
     def stop_listening(self):
         if not self.running:
@@ -102,15 +105,19 @@ class Server:
         print("Server: 服务器已停止监听")
 
     def handle_request(self, data: str) -> (int, str):
-        opt = data.split(';')[0]
-        # 使用 getattr 从对象 obj 中获取方法
-        method = getattr(self, opt, None)
+        try:
+            opt = data.split(';')[0]
+            username = data.split(';')[-1]
+            if opt != "register" and not self.user_collection.find_one({'username': username}):
+                return 1, "Wrong username!"
 
-        if callable(method):
-            return method(data)
-        else:
-            return f"Method '{opt}' not found"
-
+            method = getattr(self, opt, None)
+            if callable(method):
+                return method(data)
+            else:
+                return f"Method '{opt}' not found"
+        except Exception as e:
+            return 1, str(e)
 
     def add_flight(self, flight_identifier, source_place, destination_place, departure_time, airfare, seat_availability):
         flight_document = {
@@ -123,15 +130,32 @@ class Server:
         }
 
         # 插入文档到集合中
-        self.collection.insert_one(flight_document)
-        self.collection.create_index([("flight_identifier", 1)], unique=True)
+        self.flight_info_collection.insert_one(flight_document)
+        self.flight_info_collection.create_index([("flight_identifier", 1)], unique=True)
+
+    def register(self, data: str) -> (int, str):
+        username = data.split(';')[1]
+        password = data.split(';')[2]
+        if self.user_collection.find_one({"username": username}):
+            return 1, "User already exists!"
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        self.user_collection.insert_one({"username": username, "password": hashed_password})
+        return 0, "User registered successfully!"
+
+    def login(self, data: str) -> (int, str):
+        username = data.split(';')[1]
+        password = data.split(';')[2]
+        user = self.user_collection.find_one({"username": username})
+        if not user or not bcrypt.checkpw(password.encode('utf-8'), user['password']):
+            return 1, "Invalid credentials!"
+        return 0, "Login successfully!"
 
     # 返回标志位(0:success, 1:fail) + 所有符合条件的航班信息/错误信息
     def query_flight(self, data: str) -> (int, str):
         try:
             source_place = data.split(';')[1]
             destination_place = data.split(';')[2]
-            ret = []
+            username = data.split(';')[3]
             query = {
                 "source_place": source_place,
                 "destination_place": destination_place
@@ -140,7 +164,7 @@ class Server:
                 "_id": 0,
             }
             # 执行查询并应用投影
-            cursor = self.collection.find(query, projection)
+            cursor = self.flight_info_collection.find(query, projection)
             # 将所有匹配的航班信息添加到返回列表中
             ret = [{
                     'flight_identifier': flight['flight_identifier'],
@@ -154,13 +178,13 @@ class Server:
                 return 1, f"No flights matched {source_place} to {destination_place}!"
             return 0, json.dumps(ret)
         except Exception as e:
-            return 1, str(e)
+            return 1, f"query flight failed: {str(e)}"
 
     # 返回标志位(0:success, 1:fail) + 对应航班信息/错误信息
     def query_flight_info(self, data: str) -> (int, str):
         try:
             flight_identifier = int(data.split(';')[1])
-            flight_info = self.collection.find_one(
+            flight_info = self.flight_info_collection.find_one(
                 {
                     "flight_identifier": flight_identifier
                 },
@@ -181,17 +205,17 @@ class Server:
                 return 0, json.dumps(ret)
             return 1, f"No flights matched {flight_identifier}!"
         except Exception as e:
-            print(str(e))
-            return 1, str(e)
+            return 1, f"query flight info failed: {str(e)}"
 
     def reserve_seats(self, data: str) -> (int, str):
         try:
             # 解析传入的数据
             flight_identifier = int(data.split(';')[1])
             seats_count = int(data.split(';')[2])
+            username = data.split(';')[3]
 
             # 查找航班信息
-            flight_info = self.collection.find_one({"flight_identifier": flight_identifier})
+            flight_info = self.flight_info_collection.find_one({"flight_identifier": flight_identifier})
             if flight_info is None:
                 return 0, f"No such flight {flight_identifier}!"
             # 检查座位数量是否足够
@@ -200,14 +224,23 @@ class Server:
             else:
                 # 更新座位数量
                 new_seat_availability = flight_info["seat_availability"] - seats_count
-                self.collection.update_one(
+                self.flight_info_collection.update_one(
                     {"flight_identifier": flight_identifier},
                     {"$set": {"seat_availability": new_seat_availability}}
                 )
+                order_id = int(round(time.time() * 1000))
+                self.order_collection.insert_one(
+                    {
+                        "id": order_id,
+                        "flight_identifier": flight_identifier,
+                        "reserver": username,
+                        "seats": seats_count
+                    }
+                )
                 self.reserve_seats_callback(flight_identifier, new_seat_availability)
-                return 0, "Seats reserved!"
+                return 0, json.dumps({'id': order_id})
         except Exception as e:
-            return 1, str(e)
+            return 1, f"reserve seats failed: {str(e)}"
 
     def reserve_seats_callback(self, flight_identifier, new_seat_availability):
         if flight_identifier in self.monitor_dict:
@@ -215,8 +248,9 @@ class Server:
             for monitor in monitor_list:
                 if datetime.now() < monitor["end_time"]:
                     response = f"flight-{flight_identifier} seats' availability updates: {new_seat_availability} at {datetime.now()}"
-                    ret = json.dumps({"code": 0, "message": response})
+                    ret = json.dumps({"code": 0, "message": response, "receiver": monitor["client_address"]})
                     self.chunk_data(ret, monitor["client_address"])
+
 
     def cleanup_expired_monitors(self):
         current_time = datetime.now()
@@ -252,7 +286,7 @@ class Server:
                     return 1, "Monitoring already exists!"
 
             monitor_info = {
-                "client_address": self.client_address,  # 假设 client_address 是在其他地方设置的
+                "client_address": self.client_address,
                 "end_time": end_time
             }
 
@@ -267,8 +301,7 @@ class Server:
             monitor_thread.start()
             return 0, "Monitoring started!"
         except Exception as e:
-            print("error:" + str(e))
-            return 1, str(e)
+            return 1, f"monitor update failed: {str(e)}"
 
     def monitor_end_thread(self, flight_identifier: int, monitor_info: dict):
         # 等待监视期结束
@@ -280,9 +313,8 @@ class Server:
         # 发送监视结束消息
         client_address = monitor_info["client_address"]
         message = f"Monitor finished!"
-        ret = json.dumps({"code": 0, "message": message})
-        self.server_socket.sendto(string_to_binary_string(ret).encode('utf-8'), client_address)
-        print(f"Server: {client_address} finished monitoring")
+        ret = json.dumps({"code": 0, "message": message, "receiver": client_address})
+        self.chunk_data(ret, client_address)
         # 从监视列表中移除
         self.monitor_dict[flight_identifier].remove(monitor_info)
         if not self.monitor_dict[flight_identifier]:

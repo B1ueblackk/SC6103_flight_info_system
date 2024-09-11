@@ -1,5 +1,5 @@
 {
-  "host": "localhost",
+  "host": "127.0.0.1",
   "port": "12345",
   "test_port": "12346",
   "mongodb": {
@@ -9,5 +9,6 @@
         "test_database": "test_flight_info",
         "username": "",
         "password": ""
-    }
+    },
+  "INFURA_PROJECT_ID": "5a4a057f20f447c09d2fb66245517759"
 }
