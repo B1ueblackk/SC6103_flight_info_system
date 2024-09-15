@@ -1,3 +1,4 @@
+import sys
 import time
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
 from flask_socketio import SocketIO
@@ -258,4 +259,5 @@ def query_all_orders():
         return json.dumps({"code": 1, "response": "Query Failed!"})
 
 if __name__ == "__main__":
+    print("Client start.", file=sys.stderr)
     socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)
