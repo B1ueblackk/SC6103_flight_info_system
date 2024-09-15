@@ -5,7 +5,6 @@ import time
 from datetime import datetime, timedelta
 
 import bcrypt
-from flask import jsonify
 from pymongo import MongoClient
 from utils.data_process import binary_string_to_string, string_to_binary_string
 
@@ -212,33 +211,37 @@ class Server:
             # 解析传入的数据
             flight_identifier = int(data.split(';')[1])
             seats_count = int(data.split(';')[2])
-            username = data.split(';')[3]
+            order_id = data.split(';')[3]
+            username = data.split(';')[4]
 
             # 查找航班信息
             flight_info = self.flight_info_collection.find_one({"flight_identifier": flight_identifier})
             if flight_info is None:
-                return 0, f"No such flight {flight_identifier}!"
+                return 1, f"No such flight {flight_identifier}!"
             # 检查座位数量是否足够
             if flight_info["seat_availability"] < seats_count:
                 return 1, "Seats not enough!"
-            else:
-                # 更新座位数量
-                new_seat_availability = flight_info["seat_availability"] - seats_count
-                self.flight_info_collection.update_one(
-                    {"flight_identifier": flight_identifier},
-                    {"$set": {"seat_availability": new_seat_availability}}
-                )
-                order_id = int(round(time.time() * 1000))
-                self.order_collection.insert_one(
-                    {
-                        "id": order_id,
-                        "flight_identifier": flight_identifier,
-                        "reserver": username,
-                        "seats": seats_count
-                    }
-                )
-                self.reserve_seats_callback(flight_identifier, new_seat_availability)
-                return 0, json.dumps({'id': order_id})
+            user_info = self.user_collection.find_one({"username": username})
+            # 检查用户是否存在
+            if user_info is None:
+                return 1, "User does not exist!"
+
+            # 更新座位数量
+            new_seat_availability = flight_info["seat_availability"] - seats_count
+            self.flight_info_collection.update_one(
+                {"flight_identifier": flight_identifier},
+                {"$set": {"seat_availability": new_seat_availability}}
+            )
+            self.order_collection.insert_one(
+                {
+                    "id": order_id,
+                    "flight_identifier": flight_identifier,
+                    "reserver": username,
+                    "seats": seats_count
+                }
+            )
+            self.reserve_seats_callback(flight_identifier, new_seat_availability)
+            return 0, json.dumps({'id': order_id})
         except Exception as e:
             return 1, f"reserve seats failed: {str(e)}"
 
@@ -322,6 +325,34 @@ class Server:
         if not self.user_dict[client_address]:
             del self.user_dict[client_address]
 
+    def query_order(self, data: str) -> (int, str):
+        order_id = data.split(';')[1]
+        username = data.split(';')[2]
+        if not self.user_is_valid(username):
+            return 1, "Invalid username!"
+        order = self.order_collection.find_one({"id": order_id})
+        if order is None:
+            return 1, "Order not found!"
+        return 0, json.dumps({"id": order_id, "reserver": order["reserver"], "flight_identifier": order["flight_identifier"], "seats": order["seats"]})
+
+    def query_all_orders(self, data: str):
+        username = data.split(';')[1]
+        if not self.user_is_valid(username):
+            return 1, "Invalid username!"
+        cursor = self.order_collection.find({"reserver": username})
+        ret = [{
+            'order_id': order['id'],
+            'flight_identifier': order['flight_identifier'],
+        } for order in cursor]
+        if len(ret) == 0:
+            return 1, "No orders found!"
+        return 0, json.dumps({"orders": ret})
+
+    def user_is_valid(self, username: str):
+        user = self.user_collection.find_one({"username": username})
+        if user is None:
+            return False
+        return True
 
 if __name__ == "__main__":
     print(1)

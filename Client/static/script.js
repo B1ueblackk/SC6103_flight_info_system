@@ -217,7 +217,7 @@ function updateFlightInfoTable(flightInfo) {
 async function reserveSeats() {
     const flightId = document.getElementById('flightId').value;
     const seatsCount = document.getElementById('seatsCount').value;
-
+    const order_id = Date.now() + "";
     fetch('/reserve_seats', {
         method: 'POST',
         headers: {
@@ -225,28 +225,28 @@ async function reserveSeats() {
         },
         body: JSON.stringify({
             flight_id: flightId,
-            seats_count: seatsCount
+            seats_count: seatsCount,
+            order_id: order_id
         })
     })
     .then(response => response.json())
     .then(async data => {
+        const result = document.getElementById('reserveResult');
         console.log(data); // 调试用，查看完整的返回数据
-        console.log()
         let message = "An error occurred"; // 默认提示信息
-
         if (data.code === 0) {
-            order_id = JSON.parse(data['response'])["id"]
-            ret_json = JSON.parse(await reserveSeatsAndAddOrder(order_id, data['contract_address']))
+            ret_json = JSON.parse(await reserveSeatsAndAddOrder(order_id))
             if (ret_json['code'] === 0) {
-                message = "Seats reserved successfully!" + '\n' + ret_json['message']
-            } else {
-                message = ret_json['message']
+                result.innerHTML = "Seats reserved successfully! =>"
+                    + '<a href="https://sepolia.etherscan.io/tx/0x' + ret_json['message'] + '" target="_blank">'
+                    + 'Click to view transaction <=</a>';
+                return
             }
-            // 提取成功的响应信息
-        } else if (data.code === 1) {
-            message = "Error: " + data.response; // 错误提示信息
+            result.innerText = ret_json['message'];
+            return
         }
-        document.getElementById('reserveResult').innerText = message;
+        message = "Error: " + data.response; // 错误提示信息
+        result.innerText = message;
     })
     .catch(error => {
         console.error('Error:', error);
@@ -254,39 +254,33 @@ async function reserveSeats() {
     });
 }
 
-async function reserveSeatsAndAddOrder(orderId, contractAddress) {
+async function reserveSeatsAndAddOrder(orderId) {
     try{
-        initContract()
-
         const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
         const userAddress = accounts[0];
-
         console.log('MetaMask address:', userAddress);
 
-        // 构造交易，调用智能合约的 addOrder 方法
+        // 构造交易对象
         const transactionParameters = {
-            to: contractAddress,  // 合约地址
-            from: userAddress,    // 用户地址
-            data: contract.methods.addOrder(orderId).encodeABI(), // 调用合约函数
+            from: userAddress, // 从哪个地址发起交易
+            gas: 3000000       // 设置 gas 上限
         };
 
-        // 让 MetaMask 弹出签名和发送交易的窗口
-        const txHash = await ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [transactionParameters],
-        });
-        ret_message = 'Transaction hash:' + txHash;
-        return JSON.stringify({'code':0, 'message': ret_message})
+        // 调用合约中的 addOrder 方法
+        const txReceipt = await contract.methods.addOrder(orderId).send(transactionParameters);
+
+        console.log('Transaction successful:', txReceipt);
+        return JSON.stringify({'code':0, 'message': 'Order added successfully with transaction hash: ' + txReceipt.transactionHash})
     } catch (error) {
         ret_message = "Error during MetaMask transaction"
         return JSON.stringify({'code':1, 'message': ret_message})
     }
 }
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function () {
     const updatesDiv = document.getElementById('monitorResult');
     const allButtons = document.querySelectorAll('button');
 
-    socket.on('monitor_update', function(msg) {
+    socket.on('monitor_update', function (msg) {
         const newUpdate = document.createElement('p');
         newUpdate.innerText = msg.data;
         updatesDiv.appendChild(newUpdate);
@@ -298,6 +292,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     });
+    await initContract()
 });
 
 function monitorFlight() {
@@ -475,7 +470,72 @@ function checkLoginStatus() {
     });
 }
 
-// // 页面加载时检查登录状态
+function queryOrder() {
+    const orderId = document.getElementById('orderId').value;
+    if (orderId == null || orderId === '') {
+        alert("Wrong order id!");
+        return 0;
+    }
+    fetch('/query_order', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            order_id: orderId
+        })
+    }).then(response => response.json())
+    .then(data => {
+        console.log(data)
+        const orderQueryResult = document.getElementById("orderQueryResult")
+        if (data['code'] === 1) {
+            orderQueryResult.innerText = data['response']
+            return 0;
+        }
+        let order = JSON.parse(data['response'])
+        // 构建表格的基础结构
+        orderQueryResult.innerHTML = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Flight Identifier</th>
+                    <th>Reserver</th>
+                    <th>Seats</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>${order.id}</td>
+                    <td>${order.flight_identifier}</td>
+                    <td>${order.reserver}</td>
+                    <td>${order.seats}</td>
+                </tr>
+            </tbody>
+        </table>
+        `;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+function getAllOrders() {
+    fetch('/query_all_orders', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    }).then(response => response.json())
+    .then(data => {
+        console.log(data)
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+// 页面加载时检查登录状态
 window.onload = function() {
     const currentPath = window.location.pathname;
     console.log(currentPath)

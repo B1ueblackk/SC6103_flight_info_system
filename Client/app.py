@@ -4,17 +4,15 @@ from flask_socketio import SocketIO, emit, join_room
 import json
 import socket
 import threading
-from web3 import Web3
 from data_process import string_to_binary_string, binary_string_to_string
 
 with open("../config.json", 'r') as f:
     config = json.load(f)
     f.close()
-
-
 app = Flask(__name__)
 app.secret_key = 'some_secret_key'  # 用于 session 加密
 socketio = SocketIO(app)
+
 class Client:
     def __init__(self, config_file='../config.json', flag=0):
         with open(config_file, 'r') as f:
@@ -58,13 +56,21 @@ class Client:
         query_str = "query_flight_info" + ";" + str(flight_id)
         return self.send_request(query_str)
 
-    def reserve_seats(self, flight_id: int, seats_count: int, reserve_result=None):
-        transfer_str = "reserve_seats" + ";" + str(flight_id) + ";" + str(seats_count)
+    def reserve_seats(self, flight_id: int, seats_count: int, order_id: str, reserve_result=None):
+        transfer_str = "reserve_seats" + ";" + str(flight_id) + ";" + str(seats_count) + ";" + str(order_id)
         return self.send_request(transfer_str, reserve_result)
 
     def monitor_update(self, flight_id: int, period_time: int, monitor_result=None):
         transfer_str = "monitor_update" + ";" + str(flight_id) + ";" + str(period_time)
         return self.send_request(transfer_str, monitor_result)
+
+    def query_all_orders(self):
+        transfer_str = "query_all_orders"
+        return self.send_request(transfer_str)
+
+    def query_order(self, order_id):
+        transfer_str = "query_order" + ";" + str(order_id)
+        return self.send_request(transfer_str)
 
     def send_request(self, data: str, monitor_result=None):
         if session.get('username') is None:
@@ -190,7 +196,8 @@ def reserve_seats():
     data = request.get_json()
     flight_id = data['flight_id']
     seats_count = data['seats_count']
-    code, response = client.reserve_seats(flight_id, seats_count)
+    order_id = data['order_id']
+    code, response = client.reserve_seats(flight_id, seats_count, order_id)
     return jsonify({'code': code, 'response': response})
 
 @app.route('/save_address', methods=['POST'])
@@ -221,6 +228,28 @@ def start_monitor():
         return json.dumps({"code": 1, "response": "Bad Params!"})
     client.monitor_update(int(flight_id), int(period_time))
     return json.dumps({"code": 0, "response": "Monitor Started!"})
+
+@app.route('/query_order', methods=['POST'])
+def query_order():
+    try:
+        data = request.get_json()
+        order_id = data['order_id']
+        if order_id is  None or not order_id.isdigit():
+            return json.dumps({"code": 1, "response": "Bad Params!"})
+        code, response = client.query_order(order_id)
+        return json.dumps({"code": code, "response": response})
+    except Exception as e:
+        print(f"query order error:{str(e)}")
+        return json.dumps({"code": 1, "response": "Query Failed!"})
+
+@app.route('/query_all_orders', methods=['POST'])
+def query_all_orders():
+    try:
+        code, response = client.query_all_orders()
+        return json.dumps({"code": code, "response": response})
+    except Exception as e:
+        print(f"query orders error:{str(e)}")
+        return json.dumps({"code": 1, "response": "Query Failed!"})
 
 if __name__ == "__main__":
     socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)

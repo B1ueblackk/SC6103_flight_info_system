@@ -10,5 +10,6 @@
         "username": "",
         "password": ""
     },
-  "INFURA_PROJECT_ID": "5a4a057f20f447c09d2fb66245517759"
+  "INFURA_PROJECT_ID": "5a4a057f20f447c09d2fb66245517759",
+  "contract_address": "0x93658015b6c7d6c42b4e7631b0b08ec75a475033"
 }

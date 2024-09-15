@@ -4,7 +4,7 @@ import time
 import unittest
 from http.client import responses
 
-from Client.client import Client
+from Client.app import Client
 from Server.server import Server
 
 
@@ -20,7 +20,7 @@ class TestServer(unittest.TestCase):
 
     def setup_and_start_server(self):
         self.server = Server(config_file='../config.json', flag=1)
-        self.server.collection.drop()
+        self.server.flight_info_collection.drop()
         self.server.start_listening()
 
     # 初始化测试数据库
@@ -39,10 +39,10 @@ class TestServer(unittest.TestCase):
 
     # 测试数据库CRUD
     def test_database_CRUD(self):
-        self.assertEqual(self.server.collection.find_one(), None)
+        self.assertEqual(self.server.flight_info_collection.find_one(), None)
         self.add_data()
 
-        flight101 = self.server.collection.find_one({"flight_identifier":101})
+        flight101 = self.server.flight_info_collection.find_one({"flight_identifier":101})
         self.assertNotEqual(flight101, None)
         self.assertEqual(flight101["airfare"], 299.99)
         self.assertEqual(flight101["seat_availability"], 50)
