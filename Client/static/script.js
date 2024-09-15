@@ -1,10 +1,4 @@
-let socket;
-fetch('https://api.ipify.org?format=json')
-  .then(response => response.json())
-  .then(data => {
-      socket = io.connect(`${data.ip}:10000`);
-  })
-  .catch(error => console.error('Error fetching IP:', error));
+let socket = io.connect(`https://sc6103-flight-info-system.onrender.com/`);
 
 const contractABI = [
 	{
