@@ -6,6 +6,7 @@ import json
 import socket
 import threading
 from data_process import string_to_binary_string, binary_string_to_string
+from server import Server
 
 app = Flask(__name__)
 app.secret_key = 'some_secret_key'  # 用于 session 加密
@@ -259,5 +260,7 @@ def query_all_orders():
         return json.dumps({"code": 1, "response": "Query Failed!"})
 
 if __name__ == "__main__":
+    server = Server()
+    server.start_listening()
     print("Client start.", file=sys.stderr)
     socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)

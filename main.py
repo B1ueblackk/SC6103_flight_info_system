@@ -4,11 +4,11 @@ import os
 # dotenv.load_dotenv("local.env")
 
 def run_app1():
-    os.system("python3 ./Client/app.py")
+    os.system("python3 ./Client/server.py")
 
 
 def run_app2():
-    os.system("python3 ./Server/app.py")
+    os.system("python3 ./Server/server.py")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,3 @@
-import sys
-from xxlimited_35 import error
-
 from flask import Flask
 import json
 import os
@@ -355,10 +352,3 @@ class Server:
         if user is None:
             return False
         return True
-
-
-if __name__ == "__main__":
-    print("Server start.", file=sys.stderr)
-    server = Server()
-    server.start_listening()
-    app.run(host="127.0.0.1", port=5001, debug=True, allow_unsafe_werkzeug=True)
