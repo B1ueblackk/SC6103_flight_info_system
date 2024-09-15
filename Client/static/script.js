@@ -1,4 +1,4 @@
-const socket = io.connect('http://0.0.0.0:5000');
+const socket = io.connect('0.0.0.0:5000');
 const contractABI = [
 	{
 		"anonymous": false,
