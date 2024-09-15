@@ -4,7 +4,7 @@ import os
 # dotenv.load_dotenv("local.env")
 
 def run_app1():
-    os.system("python3 ./Client/server.py")
+    os.system("python3 ./Client/app.py")
 
 
 def run_app2():

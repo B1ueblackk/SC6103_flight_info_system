@@ -10,8 +10,6 @@ from data_process import binary_string_to_string, string_to_binary_string
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
-app = Flask(__name__)
-
 db_username = os.getenv("db_username")
 db_pwd = os.getenv("db_pwd")
 uri = f"mongodb+srv://{db_username}:{db_pwd}@cluster0.osgx6.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -352,3 +350,7 @@ class Server:
         if user is None:
             return False
         return True
+
+if __name__ == '__main__':
+    server = Server()
+    server.start_listening()

@@ -260,7 +260,5 @@ def query_all_orders():
         return json.dumps({"code": 1, "response": "Query Failed!"})
 
 if __name__ == "__main__":
-    server = Server()
-    server.start_listening()
     print("Client start.", file=sys.stderr)
     socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)
