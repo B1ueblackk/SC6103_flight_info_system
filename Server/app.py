@@ -353,8 +353,8 @@ class Server:
             return False
         return True
 
-server = Server()
-server.start_listening()
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5001)
+    server = Server()
+    server.start_listening()
+    app.run(host="127.0.0.1", port=5001, debug=True, allow_unsafe_werkzeug=True)
