@@ -1,7 +1,6 @@
 from multiprocessing import Process
 import os
-import dotenv
-
+# import dotenv
 # dotenv.load_dotenv("local.env")
 
 def run_app1():
