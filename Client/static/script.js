@@ -1,4 +1,11 @@
-const socket = io.connect('127.0.0.1:10000');
+let socket;
+fetch('https://api.ipify.org?format=json')
+  .then(response => response.json())
+  .then(data => {
+      socket = io.connect(`${data.ip}:10000`);
+  })
+  .catch(error => console.error('Error fetching IP:', error));
+
 const contractABI = [
 	{
 		"anonymous": false,
