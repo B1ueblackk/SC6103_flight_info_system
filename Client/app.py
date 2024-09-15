@@ -261,4 +261,5 @@ def query_all_orders():
 
 if __name__ == "__main__":
     print("Client start.", file=sys.stderr)
-    socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    # socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, allow_unsafe_werkzeug=True)
