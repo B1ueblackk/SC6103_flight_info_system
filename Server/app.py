@@ -6,7 +6,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 import bcrypt
-from utils.data_process import binary_string_to_string, string_to_binary_string
+from data_process import binary_string_to_string, string_to_binary_string
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
