@@ -264,5 +264,4 @@ if __name__ == "__main__":
     print("Client start.", file=sys.stderr)
     # socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)
     port = int(os.environ.get('PORT', 5000))  # 使用环境变量 PORT
-    app.run()
     socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
