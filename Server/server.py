@@ -1,20 +1,31 @@
 import json
+import os
 import socket
 import threading
 import time
 from datetime import datetime, timedelta
-
 import bcrypt
-from pymongo import MongoClient
 from utils.data_process import binary_string_to_string, string_to_binary_string
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
 
+db_username = os.getenv("db_username")
+db_pwd = os.getenv("db_pwd")
+uri = f"mongodb+srv://{db_username}:{db_pwd}@cluster0.osgx6.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+
+
+try:
+    with open("../config.json", 'r') as f:
+        config = json.load(f)
+        f.close()
+except FileNotFoundError:
+    with open("config.json", 'r') as f:
+        config = json.load(f)
+        f.close()
 
 class Server:
     def __init__(self, config_file='../config.json',flag=0):
         print("Server: Server starting...")
-        # 从 config.json 文件读取配置
-        with open(config_file, 'r') as f:
-            config = json.load(f)
         self.host = config.get('host', 'localhost')
         if flag == 0:
             self.port = int(config.get('port', 12345))
@@ -27,31 +38,17 @@ class Server:
         self.user_dict = {}
         self.running = False
         try:
-            self.connect_database(config_file=config_file, flag=flag)
+            self.connect_database(flag=flag)
         except Exception as e:
             print("Server: connect failed\n", str(e))
 
-    def connect_database(self, flag: int = 0, config_file='../config.json'):
-        # 从配置文件中获取MongoDB连接参数
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-        host = config['mongodb']['host']
-        port = config['mongodb']['port']
+    def connect_database(self, flag: int = 0):
         if flag == 0:
             database_name = config['mongodb']['database']
         else:
             database_name = config['mongodb']['test_database']
-        username = config['mongodb']['username']
-        password = config['mongodb']['password']
 
-        # 连接到MongoDB
-        if username and password:
-            # 如果配置了用户名和密码，则使用身份验证连接
-            mongo_uri = f"mongodb://{username}:{password}@{host}:{port}/{database_name}"
-        else:
-            # 否则使用无身份验证连接
-            mongo_uri = f"mongodb://{host}:{port}/"
-        client = MongoClient(mongo_uri)
+        client = MongoClient(uri, server_api=ServerApi('1'))
         # 选择数据库
         db = client[database_name]
         # 选择集合

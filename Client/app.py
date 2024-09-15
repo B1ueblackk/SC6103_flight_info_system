@@ -1,22 +1,28 @@
 import time
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
-from flask_socketio import SocketIO, emit, join_room
+from flask_socketio import SocketIO
 import json
 import socket
 import threading
 from data_process import string_to_binary_string, binary_string_to_string
 
-with open("../config.json", 'r') as f:
-    config = json.load(f)
-    f.close()
 app = Flask(__name__)
 app.secret_key = 'some_secret_key'  # 用于 session 加密
 socketio = SocketIO(app)
 
+try:
+    with open("../config.json", 'r') as f:
+        config = json.load(f)
+        f.close()
+except FileNotFoundError:
+    with open("config.json", 'r') as f:
+        config = json.load(f)
+        f.close()
+
 class Client:
     def __init__(self, config_file='../config.json', flag=0):
-        with open(config_file, 'r') as f:
-            config = json.load(f)
+        # with open(config_file, 'r') as f:
+        #     config = json.load(f)
         self.server_host = config.get('host', 'localhost')
         if flag == 0:
             self.server_port = int(config.get('port', 12345))

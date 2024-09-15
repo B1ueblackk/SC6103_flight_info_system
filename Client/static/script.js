@@ -237,8 +237,9 @@ async function reserveSeats() {
         if (data.code === 0) {
             ret_json = JSON.parse(await reserveSeatsAndAddOrder(order_id))
             if (ret_json['code'] === 0) {
+                console.log(ret_json['message'])
                 result.innerHTML = "Seats reserved successfully! =>"
-                    + '<a href="https://sepolia.etherscan.io/tx/0x' + ret_json['message'] + '" target="_blank">'
+                    + '<a href="https://sepolia.etherscan.io/tx/' + ret_json['message'] + '" target="_blank">'
                     + 'Click to view transaction <=</a>';
                 return
             }
@@ -270,7 +271,7 @@ async function reserveSeatsAndAddOrder(orderId) {
         const txReceipt = await contract.methods.addOrder(orderId).send(transactionParameters);
 
         console.log('Transaction successful:', txReceipt);
-        return JSON.stringify({'code':0, 'message': 'Order added successfully with transaction hash: ' + txReceipt.transactionHash})
+        return JSON.stringify({'code':0, 'message': txReceipt.transactionHash})
     } catch (error) {
         ret_message = "Error during MetaMask transaction"
         return JSON.stringify({'code':1, 'message': ret_message})
