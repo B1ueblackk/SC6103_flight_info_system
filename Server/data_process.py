@@ -1,6 +1,6 @@
 import struct
 from datetime import datetime
-from Server.flight import Flight
+from flight import Flight
 
 
 def marshall(flight: Flight) -> bytes:
