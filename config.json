@@ -1,0 +1,15 @@
+{
+  "host": "127.0.0.1",
+  "port": "12345",
+  "test_port": "12346",
+  "mongodb": {
+        "host": "localhost",
+        "port": 27017,
+        "database": "flight_info",
+        "test_database": "test_flight_info",
+        "username": "",
+        "password": ""
+    },
+  "INFURA_PROJECT_ID": "5a4a057f20f447c09d2fb66245517759",
+  "contract_address": "0x93658015b6c7d6c42b4e7631b0b08ec75a475033"
+}

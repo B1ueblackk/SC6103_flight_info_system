@@ -90,16 +90,18 @@ def binary_string_to_string(binary_string: str) -> str:
 
 
 if __name__ == '__main__':
-    departure_time = datetime(2024, 9, 1, 15, 30)  # 示例：2024年9月1日15:30
-    flight = Flight(
-        flight_identifier=101,
-        source_place="New York",
-        destination_place="Los Angeles",
-        departure_time=departure_time,
-        airfare=299.99,
-        seat_availability=50
-    )
-    binary_data = marshall(flight)
+    # departure_time = datetime(2024, 9, 1, 15, 30)  # 示例：2024年9月1日15:30
+    # flight = Flight(
+    #     flight_identifier=101,
+    #     source_place="New York",
+    #     destination_place="Los Angeles",
+    #     departure_time=departure_time,
+    #     airfare=299.99,
+    #     seat_availability=50
+    # )
+    # binary_data = marshall(flight)
     # print(binary_data)
-    flight1 = unmarshall(binary_data)
-    print(flight1.__repr__())
+    # flight1 = unmarshall(binary_data)
+    # print(flight1.__repr__())
+    print(binary_string_to_string("0100111001100101011101110010000001011001011011110111001001101011"))
+    print(bytes_to_binary_string(b'New York'))

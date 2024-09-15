@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Info Client - Login</title>
+    <link rel="stylesheet" href="../static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Login</h1>
+
+    <div class="form-group">
+        <label for="loginUsername">Username:</label>
+        <input type="text" id="loginUsername" placeholder="Enter username">
+        <label for="loginPassword">Password:</label>
+        <input type="password" id="loginPassword" placeholder="Enter password">
+        <button onclick="login()">Login</button>
+        <div id="loginResult" class="result"></div>
+    </div>
+
+    <div class="form-group">
+        <p>Don't have an account? <a href="#" onclick="showRegisterModal()">Register here</a></p>
+    </div>
+
+    <!-- Hidden registration modal -->
+    <div id="registerModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeRegisterModal()">&times;</span>
+            <h2>Register</h2>
+            <label for="registerUsername">Username:</label>
+            <input type="text" id="registerUsername" placeholder="Enter username">
+            <label for="registerPassword">Password:</label>
+            <input type="password" id="registerPassword" placeholder="Enter password">
+            <button onclick="register()">Register</button>
+            <div id="registerResult" class="result"></div>
+        </div>
+    </div>
+
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.3.2/socket.io.min.js"></script>
+<script src="../static/script.js"></script>
+</body>
+</html>
