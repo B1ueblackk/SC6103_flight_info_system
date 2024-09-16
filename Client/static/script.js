@@ -1,4 +1,5 @@
-let socket = io.connect(`https://sc6103-flight-info-system.onrender.com/`);
+let socket = io.connect(`127.0.0.1:10000`);
+// let socket = io.connect(`https://sc6103-flight-info-system.onrender.com/`);
 
 const contractABI = [
 	{
@@ -367,7 +368,6 @@ function monitorFlight() {
 function login() {
     const username = document.getElementById('loginUsername').value;
     const password = document.getElementById('loginPassword').value;
-
     fetch('/login', {
         method: 'POST',
         headers: {
@@ -544,5 +544,6 @@ window.onload = function() {
     // 如果当前页面不是登录页面，则检查登录状态
     if (currentPath !== '/login.html' && currentPath !== '/') {
         checkLoginStatus();
+        return 0;
     }
 };

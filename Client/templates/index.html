@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flight Info Client</title>
     <link rel="stylesheet" href="../static/style.css">
+    <link rel="stylesheet" href="../static/flight_card.css">
     <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
 </head>
 <body>
@@ -14,6 +15,20 @@
     <button class="order-button" onclick="getAllOrders()">My Orders</button>
     <div class="container">
         <h1>Flight Info Client</h1>
+
+        <div class="carousel-container">
+            <div class="carousel" id="flight-container">
+
+            </div>
+            <div class="pagination">
+                <span data-index="0" class="dot"></span>
+                <span data-index="1" class="dot"></span>
+                <span data-index="2" class="dot"></span>
+                <span data-index="3" class="dot"></span>
+                <span data-index="4" class="dot"></span>
+                <span data-index="5" class="dot"></span>
+            </div>
+        </div>
 
         <div class="form-group">
             <h2>Query Flight</h2>
@@ -68,6 +83,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.3.2/socket.io.min.js"></script>
 <script src="../static/script.js"></script>
+<script src="../static/flight_card.js"></script>
 
 </body>
 </html>

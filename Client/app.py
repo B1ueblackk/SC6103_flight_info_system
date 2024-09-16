@@ -81,6 +81,10 @@ class Client:
         transfer_str = "query_order" + ";" + str(order_id)
         return self.send_request(transfer_str)
 
+    def init(self):
+        transfer_str = "init"
+        return self.send_request(transfer_str)
+
     def send_request(self, data: str, monitor_result=None):
         if session.get('username') is None:
             if data.split(';')[0] != "register" and data.split(';')[0] != "login":
@@ -148,6 +152,11 @@ def index():
     if 'username' not in session:
         return redirect(url_for('home'))
     return render_template('index.html')
+
+@app.route('/init', methods=['POST'])
+def init():
+    code, response = client.init()
+    return jsonify({'code': code, 'response': response})
 
 @app.route('/login.html')
 def login_html():
@@ -263,9 +272,5 @@ def query_all_orders():
 if __name__ == "__main__":
     print("Client start.", file=sys.stderr)
     # socketio.run(app, host='127.0.0.1', port=5000, debug=True, allow_unsafe_werkzeug=True)
-    port = int(os.environ.get('PORT', 5000))  # 使用环境变量 PORT
-    print("port: " + str(port), file=sys.stderr)
-    hostname = socket.gethostname()
-    ip_address = socket.gethostbyname(hostname)
-    print("ip: " + ip_address, file=sys.stderr)
+    port = int(os.environ.get('PORT', 10000))  # 使用环境变量 PORT
     socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)

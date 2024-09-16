@@ -127,7 +127,13 @@ class Server:
 
         # 插入文档到集合中
         self.flight_info_collection.insert_one(flight_document)
-        self.flight_info_collection.create_index([("flight_identifier", 1)], unique=True)
+        # self.flight_info_collection.create_index([("flight_identifier", 1)], unique=True)
+
+    def init(self, data: str) -> (int, str):
+        username = data.split(';')[1]
+        if not self.user_is_valid(username):
+            return 1, "Wrong username!"
+        return 0, self.get_top_flights()
 
     def register(self, data: str) -> (int, str):
         username = data.split(';')[1]
@@ -162,14 +168,18 @@ class Server:
             # 执行查询并应用投影
             cursor = self.flight_info_collection.find(query, projection)
             # 将所有匹配的航班信息添加到返回列表中
+            from datetime import datetime
+
             ret = [{
-                    'flight_identifier': flight['flight_identifier'],
-                    'source_place': flight['source_place'],
-                    'destination_place': flight['destination_place'],
-                    'departure_time': flight['departure_time'].strftime('%Y-%m-%dT%H:%M:%S'),
-                    'airfare': flight['airfare'],
-                    'seat_availability': flight['seat_availability']
-                } for flight in cursor]
+                'flight_identifier': flight['flight_identifier'],
+                'source_place': flight['source_place'],
+                'destination_place': flight['destination_place'],
+                'departure_time': datetime.strptime(flight['departure_time'], '%Y-%m-%dT%H:%M:%S.%fZ').strftime(
+                    '%Y-%m-%dT%H:%M:%S') if isinstance(flight['departure_time'], str) else flight[
+                    'departure_time'].strftime('%Y-%m-%dT%H:%M:%S'),
+                'airfare': flight['airfare'],
+                'seat_availability': flight['seat_availability']
+            } for flight in cursor]
             if len(ret) == 0:
                 return 1, f"No flights matched {source_place} to {destination_place}!"
             return 0, json.dumps(ret)
@@ -350,3 +360,21 @@ class Server:
         if user is None:
             return False
         return True
+
+    def get_top_flights(self):
+        # 假设 flight_info_collection 是你的航班信息 collection
+        top_flights = self.flight_info_collection.find().sort('seat_availability', -1).limit(6)
+        # 将结果转换为列表，方便进一步操作
+        top_flight_list = [{
+            'flight_identifier': flight['flight_identifier'],
+            'source_place': flight['source_place'],
+            'destination_place': flight['destination_place'],
+            'departure_time': datetime.strptime(flight['departure_time'], '%Y-%m-%dT%H:%M:%S.%fZ').strftime('%Y-%m-%dT%H:%M:%S') if isinstance(flight['departure_time'], str) else flight['departure_time'].strftime('%Y-%m-%dT%H:%M:%S'),
+            'airfare': flight['airfare'],
+            'seat_availability': flight['seat_availability']
+        } for flight in top_flights]
+        return json.dumps(top_flight_list)
+
+if __name__ == '__main__':
+    server = Server()
+    server.start_listening()
