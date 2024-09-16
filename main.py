@@ -1,5 +1,6 @@
 from multiprocessing import Process
 import os
+
 # import dotenv
 # dotenv.load_dotenv("local.env")
 
@@ -8,7 +9,7 @@ def run_app1():
 
 
 def run_app2():
-    os.system("python3 ./Server/server.py")
+    os.system("python3 ./Client/server.py")
 
 
 if __name__ == "__main__":

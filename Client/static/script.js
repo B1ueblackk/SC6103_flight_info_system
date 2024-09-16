@@ -1,5 +1,5 @@
-let socket = io.connect(`127.0.0.1:10000`);
-// let socket = io.connect(`https://sc6103-flight-info-system.onrender.com/`);
+// let socket = io.connect(`127.0.0.1:10000`);
+let socket = io.connect(`https://sc6103-flight-info-system.onrender.com/`);
 
 const contractABI = [
 	{
