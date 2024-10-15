@@ -6,6 +6,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 import bcrypt
+
 from data_process import binary_string_to_string, string_to_binary_string
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
@@ -51,6 +52,7 @@ class Server:
         client = MongoClient(uri, server_api=ServerApi('1'))
         # 选择数据库
         db = client[database_name]
+
         # 选择集合
         self.flight_info_collection = db[database_name]
         self.user_collection = db["user_info"]
@@ -70,7 +72,7 @@ class Server:
                     print(f"Server: 接收到来自 {self.client_address} 的数据: {text}")
                     ret_flag, ret_msg = self.handle_request(text)
                     # 构造要发送的响应
-                    response = json.dumps({'flag': ret_flag, 'message': ret_msg, "receiver": self.client_address})
+                    response = f"\"flag\": {ret_flag}, \"message\": {ret_msg}, \"receiver\": {self.client_address}"
                     self.chunk_data(response, self.client_address)
                 except socket.timeout:
                     # 超时检查，避免无限等待
@@ -89,7 +91,7 @@ class Server:
             chunk = response_binary[i:i + CHUNK_SIZE]
             is_last_chunk = (i + CHUNK_SIZE >= len(response_binary))  # 是否是最后一个chunk
             self.server_socket.sendto(chunk + (b'END' if is_last_chunk else b''), address)
-        print(f"Server: 数据{str_to_send} 已发送给 {address}")
+        print(f"Server: Data {str_to_send} has sent to {address}")
 
     def stop_listening(self):
         if not self.running:
@@ -98,7 +100,7 @@ class Server:
         # 在关闭之前检查是否已经初始化
         if self.server_socket:
             self.server_socket.close()
-        print("Server: 服务器已停止监听")
+        print("Server: stop listen!")
 
     def handle_request(self, data: str) -> (int, str):
         try:
