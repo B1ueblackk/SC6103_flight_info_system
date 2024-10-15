@@ -1,5 +1,5 @@
-// let socket = io.connect(`127.0.0.1:10000`);
-let socket = io.connect(`https://sc6103-flight-info-system.onrender.com/`);
+let socket = io.connect(`127.0.0.1:5000`);
+// let socket = io.connect(`https://sc6103-flight-info-system.onrender.com/`);
 
 const contractABI = [
 	{
@@ -237,16 +237,16 @@ async function reserveSeats() {
         console.log(data); // 调试用，查看完整的返回数据
         let message = "An error occurred"; // 默认提示信息
         if (data.code === 0) {
-            ret_json = JSON.parse(await reserveSeatsAndAddOrder(order_id))
-            if (ret_json['code'] === 0) {
-                console.log(ret_json['message'])
-                result.innerHTML = "Seats reserved successfully! =>"
-                    + '<a href="https://sepolia.etherscan.io/tx/' + ret_json['message'] + '" target="_blank">'
-                    + 'Click to view transaction <=</a>';
-                return
-            }
-            result.innerText = ret_json['message'];
+            // ret_json = JSON.parse(await reserveSeatsAndAddOrder(order_id))
+            // if (ret_json['code'] === 0) {
+            // console.log(ret_json['message'])
+            result.innerHTML = "Seats reserved successfully! =>"
+                // + '<a href="https://sepolia.etherscan.io/tx/' + ret_json['message'] + '" target="_blank">'
+                // + 'Click to view transaction <=</a>';
             return
+            // }
+            // result.innerText = ret_json['message'];
+            // return
         }
         message = "Error: " + data.response; // 错误提示信息
         result.innerText = message;
