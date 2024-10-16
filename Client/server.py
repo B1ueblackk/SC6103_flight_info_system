@@ -1,3 +1,5 @@
+import random
+
 from flask import Flask
 import json
 import os
@@ -20,23 +22,47 @@ except FileNotFoundError:
         f.close()
 
 class Server:
-    def __init__(self, config_file='../config.json',flag=0):
-        print("Server: Server starting...")
+    def __init__(self, config_file='../config.json', invocation_semantics="at-least-once", flag=0):
+        print("Server: Server starting with semantics:", invocation_semantics)
+        self.invocation_semantics = invocation_semantics  # 保存调用语义
         self.host = config.get('host', 'localhost')
-        if flag == 0:
-            self.port = int(config.get('port', 12345))
-        else:
-            self.port = int(config.get('test_port', 12346))
-        print(f"Server: Server ip: {self.host}:{self.port}")
+        self.port = int(config.get('port', 12345)) if flag == 0 else int(config.get('test_port', 12346))
         self.server_socket = None
         self.client_address = None
         self.monitor_dict = {}
         self.user_dict = {}
+        self.query_cache = {}  # 查询缓存，用于缓存查询结果
+        self.cache_ttl = 10  # 缓存有效期，单位为秒
         self.running = False
+        self.request_history = {}  # 用于存储已经处理的请求
+
         try:
             self.connect_database(flag=flag)
         except Exception as e:
             print("Server: connect failed\n", str(e))
+
+    def start_listening(self):
+        self.running = True
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.server_socket.bind((self.host, self.port))
+        self.server_socket.settimeout(1)  # 设置超时时间为1秒
+        print(f"Server: UDP 服务器已启动，正在监听 {self.host}:{self.port}...")
+        try:
+            while self.running:
+                try:
+                    data, self.client_address = self.server_socket.recvfrom(1024)
+                    text = binary_string_to_string(data.decode('utf-8'))
+                    print(f"Server: 接收到来自 {self.client_address} 的数据: {text}")
+                    ret_flag, ret_msg = self.handle_request(text)
+                    response = json.dumps({'flag': ret_flag, 'message': ret_msg, "receiver": self.client_address})
+                    self.chunk_data(response, self.client_address)
+                except socket.timeout:
+                    continue
+        except Exception as e:
+            print("Server: start listening failed: " + str(e))
+        finally:
+            self.server_socket.close()
+            print("Server: 服务器已关闭")
 
     def connect_database(self, flag: int = 0):
         db_username = os.getenv("db_username")
@@ -56,38 +82,16 @@ class Server:
         self.user_collection = db["user_info"]
         self.order_collection = db["order_info"]
 
-    def start_listening(self):
-        self.running = True
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.server_socket.bind((self.host, self.port))
-        self.server_socket.settimeout(1)  # 设置超时时间为1秒
-        print(f"Server: UDP 服务器已启动，正在监听 {self.host}:{self.port}...")
-        try:
-            while self.running:
-                try:
-                    data, self.client_address = self.server_socket.recvfrom(1024)
-                    text = binary_string_to_string(data.decode('utf-8'))
-                    print(f"Server: 接收到来自 {self.client_address} 的数据: {text}")
-                    ret_flag, ret_msg = self.handle_request(text)
-                    # 构造要发送的响应
-                    response = json.dumps({'flag': ret_flag, 'message': ret_msg, "receiver": self.client_address})
-                    self.chunk_data(response, self.client_address)
-                except socket.timeout:
-                    # 超时检查，避免无限等待
-                    continue
-        except Exception as e:
-            print("Server: start listening failed: " + str(e))
-        finally:
-            self.server_socket.close()
-            print("Server: 服务器已关闭")
-
     def chunk_data(self, str_to_send: str, address):
+        chance = random.random()
+        if chance < 0.1:  # 模拟10%的消息丢失概率
+            print("Simulating message loss...")
+            return
         response_binary = string_to_binary_string(str_to_send).encode('utf-8')
-        # 分段发送，每次1024字节
         CHUNK_SIZE = 1024
         for i in range(0, len(response_binary), CHUNK_SIZE):
             chunk = response_binary[i:i + CHUNK_SIZE]
-            is_last_chunk = (i + CHUNK_SIZE >= len(response_binary))  # 是否是最后一个chunk
+            is_last_chunk = (i + CHUNK_SIZE >= len(response_binary))
             self.server_socket.sendto(chunk + (b'END' if is_last_chunk else b''), address)
         print(f"Server: 数据{str_to_send} 已发送给 {address}")
 
@@ -102,16 +106,33 @@ class Server:
 
     def handle_request(self, data: str) -> (int, str):
         try:
-            opt = data.split(';')[0]
-            username = data.split(';')[-1]
+            parts = data.split(';')
+            username = parts[-2]
+            request_id = parts[-1]  # 获取 request_id
+
+            # 判断重复请求：如果是 "at-most-once" 语义，且请求已经处理过，直接返回之前的结果
+            if self.invocation_semantics == "at-most-once" and request_id in self.request_history:
+                ret_flag, ret_msg, cache_time = self.request_history[request_id]
+                if time.time() - cache_time < self.cache_ttl:
+                    print(f"Server: Duplicate request detected, returning cached result for {request_id}")
+                    return ret_flag, ret_msg  # 返回之前的结果
+
+            # 执行操作
+            opt = parts[0]
             if opt != "register" and not self.user_collection.find_one({'username': username}):
                 return 1, "Wrong username!"
 
             method = getattr(self, opt, None)
             if callable(method):
-                return method(data)
+                ret_flag, ret_msg = method(data)
             else:
-                return f"Method '{opt}' not found"
+                ret_flag, ret_msg = 1, f"Method '{opt}' not found"
+
+            # 如果是 "at-most-once" 语义，保存结果
+            if self.invocation_semantics == "at-most-once":
+                self.request_history[request_id] = (ret_flag, ret_msg, time.time())
+
+            return ret_flag, ret_msg
         except Exception as e:
             return 1, str(e)
 
@@ -152,12 +173,36 @@ class Server:
             return 1, "Invalid credentials!"
         return 0, "Login successfully!"
 
+    def check_cache(self, cache_key):
+        if not self.invocation_semantics == "at-most-once":
+            return False,None
+
+        if cache_key in self.query_cache:
+            cache_entry = self.query_cache[cache_key]
+            cached_time = cache_entry['time']
+            current_time = time.time()
+
+            # 检查缓存是否过期
+            if current_time - cached_time < self.cache_ttl:
+                print(f"Server: 使用缓存的查询结果，查询条件为: {cache_key}")
+                return True, cache_entry['result']
+        return False, None
+
     # 返回标志位(0:success, 1:fail) + 所有符合条件的航班信息/错误信息
     def query_flight(self, data: str) -> (int, str):
         try:
             source_place = data.split(';')[1]
             destination_place = data.split(';')[2]
             username = data.split(';')[3]
+            request_id = data.split(';')[4]
+            cache_key = request_id
+
+            # 构造缓存键
+            cache_valid, cache_content = self.check_cache(cache_key)
+            if cache_valid:
+                print("======use cache")
+                return 0, cache_content
+
             query = {
                 "source_place": source_place,
                 "destination_place": destination_place
@@ -182,7 +227,16 @@ class Server:
             } for flight in cursor]
             if len(ret) == 0:
                 return 1, f"No flights matched {source_place} to {destination_place}!"
-            return 0, json.dumps(ret)
+
+            result_json = json.dumps(ret)
+
+            if self.invocation_semantics == "at-most-once":
+                # 将查询结果和当前时间存入缓存
+                self.query_cache[cache_key] = {
+                    'result': result_json,
+                    'time': time.time()
+                }
+            return 0, result_json
         except Exception as e:
             return 1, f"query flight failed: {str(e)}"
 
@@ -220,6 +274,11 @@ class Server:
             seats_count = int(data.split(';')[2])
             order_id = data.split(';')[3]
             username = data.split(';')[4]
+            request_id = data.split(';')[5]
+
+            cache_valid, cache_content = self.check_cache(cache_key=request_id)
+            if cache_valid:
+                return 0, cache_content
 
             # 查找航班信息
             flight_info = self.flight_info_collection.find_one({"flight_identifier": flight_identifier})
@@ -247,6 +306,12 @@ class Server:
                     "seats": seats_count
                 }
             )
+            if self.invocation_semantics == "at-most-once":
+                # 将查询结果和当前时间存入缓存
+                self.query_cache[request_id] = {
+                    'result': order_id,
+                    'time': time.time()
+                }
             self.reserve_seats_callback(flight_identifier, new_seat_availability)
             return 0, json.dumps({'id': order_id})
         except Exception as e:
@@ -286,8 +351,8 @@ class Server:
             # 更新监听字典
             if flight_identifier not in self.monitor_dict:
                 self.monitor_dict[flight_identifier] = []
-            if self.client_address not in self.user_dict:
-                self.user_dict[self.client_address] = (flight_identifier, end_time)
+            if self.client_address[0] not in self.user_dict:
+                self.user_dict[self.client_address[0]] = (flight_identifier, end_time)
             else:
                 return 1, "One client can only monitor on flight!"
 

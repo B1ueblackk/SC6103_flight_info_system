@@ -1,6 +1,8 @@
 import os
+import random
 import sys
 import time
+
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
 from flask_socketio import SocketIO
 import json
@@ -26,6 +28,7 @@ class Client:
     def __init__(self, config_file='../config.json', flag=0):
         # with open(config_file, 'r') as f:
         #     config = json.load(f)
+        self.invocation_semantics = "at-least-once"
         self.server_host = config.get('host', 'localhost')
         if flag == 0:
             self.server_port = int(config.get('port', 12345))
@@ -91,51 +94,77 @@ class Client:
                 return 1, "Need login first!"
         else:
             data += ";" + session['username']
+            request_id = session['username'] + data.replace(";", "")
+            data += ";" + request_id
 
         binary_data = string_to_binary_string(data)
         response_received = threading.Event()
+
+        max_retries = 3  # 最大重试次数
+        retry_count = 0
+        timeout_duration = 5  # 超时时间为 5 秒
+
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
-                client_socket.sendto(binary_data.encode('utf-8'), (self.server_host, self.server_port))
-                local_ip, local_port = client_socket.getsockname()
-                if data.startswith("monitor_update"):
-                    def receive_messages():
-                        complete_response = ""
-                        while True:
-                            response, _ = client_socket.recvfrom(2048)
-                            complete_response += response.decode('utf-8')
-                            if "END" in complete_response:
-                                complete_response = complete_response.replace("END", "")
-                            try:
-                                response_obj = json.loads(binary_string_to_string(complete_response))
-                                print(f"Client {local_ip}:{local_port}: 从服务器接收到的完整响应: {response_obj}")
-                                socketio.emit('monitor_update', {'data': response_obj['message']})
-                                complete_response = ""
-                                if monitor_result is not None:
-                                    monitor_result['received_updates'].append(response_obj['message'])
-                                if response_obj['message'].startswith("monitor finished"):
-                                    response_received.set()
-                                    break
-                            except json.JSONDecodeError:
-                                continue
+                client_socket.settimeout(timeout_duration)  # 设置超时时间
 
-                    receiver_thread = threading.Thread(target=receive_messages)
-                    receiver_thread.start()
-                    return response_received.wait()
-                else:
-                    complete_response = ""
-                    while True:
-                        response, _ = client_socket.recvfrom(2048)
-                        complete_response += response.decode('utf-8')
-                        if "END" in complete_response:
-                            complete_response = complete_response.replace("END", "")
-                        try:
-                            response_obj = json.loads(binary_string_to_string(complete_response))
-                            return response_obj['flag'], response_obj['message']
-                        except json.JSONDecodeError:
-                            continue
-        except socket.timeout:
-            return 1, f"Client {local_ip}:{local_port}: Request timed out"
+                while retry_count < max_retries:
+                    try:
+                        # 发送请求到服务器
+                        chance = random.random()
+                        if chance < 0.1:  # 模拟10%的消息丢失概率
+                            print("Simulating message loss...")
+                        else:
+                            client_socket.sendto(binary_data.encode('utf-8'), (self.server_host, self.server_port))
+                        local_ip, local_port = client_socket.getsockname()
+
+                        if data.startswith("monitor_update"):
+                            # 启动监听线程以接收 monitor_update 消息
+                            def receive_messages():
+                                complete_response = ""
+                                while True:
+                                    response, _ = client_socket.recvfrom(2048)
+                                    complete_response += response.decode('utf-8')
+                                    if "END" in complete_response:
+                                        complete_response = complete_response.replace("END", "")
+                                    try:
+                                        response_obj = json.loads(binary_string_to_string(complete_response))
+                                        print(
+                                            f"Client {local_ip}:{local_port}: 从服务器接收到的完整响应: {response_obj}")
+                                        socketio.emit('monitor_update', {'data': response_obj['message']})
+                                        complete_response = ""
+                                        if monitor_result is not None:
+                                            monitor_result['received_updates'].append(response_obj['message'])
+                                        if response_obj['message'].startswith("monitor finished"):
+                                            response_received.set()
+                                            break
+                                    except json.JSONDecodeError:
+                                        continue
+
+                            receiver_thread = threading.Thread(target=receive_messages)
+                            receiver_thread.start()
+                            return response_received.wait()
+                        else:
+                            complete_response = ""
+                            while True:
+                                response, _ = client_socket.recvfrom(2048)
+                                complete_response += response.decode('utf-8')
+                                if "END" in complete_response:
+                                    complete_response = complete_response.replace("END", "")
+                                try:
+                                    response_obj = json.loads(binary_string_to_string(complete_response))
+                                    return response_obj['flag'], response_obj['message']
+                                except json.JSONDecodeError:
+                                    continue
+
+                    except socket.timeout:
+                        if self.invocation_semantics == "at-most-once":
+                            return 1, "Transmit failed!"
+                        else:
+                            retry_count += 1
+                            print(
+                                f"Client {local_ip}:{local_port}: Request timed out, retrying ({retry_count}/{max_retries})")
+                return 1, f"Client {local_ip}:{local_port}: Maximum retry attempts reached"
         except Exception as e:
             return 1, f"Client {local_ip}:{local_port}: " + str(e)
 
